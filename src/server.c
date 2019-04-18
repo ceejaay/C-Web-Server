@@ -91,30 +91,12 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
  */
 void get_d20(int fd)
 {
-  /* I wrote these */
-  /* char filepath[4096]; */
-  /* struct file_data *filedata; */
   char *mime_type = "text/plain";
- 
-
   int n = rand() % 20 + 1;
   int size_of_int = sizeof(n);
   char d20[30];
   sprintf(d20, "%d", n);
-  /* printf("string length: %lu\n", sizeof(n)); */
   send_response(fd, "HTTP/1.1 200 OK", mime_type, d20, size_of_int);
-
-    // Generate a random number between 1 and 20 inclusive
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
-
-    // Use send_response() to send it back as text/plain data
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
 }
 
 /**
@@ -130,6 +112,8 @@ void resp_404(int fd)
     // Fetch the 404.html file
     snprintf(filepath, sizeof filepath, "%s/404.html", SERVER_FILES);
     filedata = file_load(filepath);
+    printf("filepath: %s\n", filepath);
+    printf("filedata: %s", filedata->data);
 
     if (filedata == NULL) {
         // TODO: make this non-fatal
@@ -138,7 +122,6 @@ void resp_404(int fd)
     }
 
     mime_type = mime_type_get(filepath);
-    printf("trying to send a 404??");
 
     send_response(fd, "HTTP/1.1 404 NOT FOUND", mime_type, filedata->data, filedata->size);
 
@@ -150,9 +133,23 @@ void resp_404(int fd)
  */
 void get_file(int fd, struct cache *cache, char *request_path)
 {
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+
+  printf("getting file\n");
+  char filepath[4096];
+  struct file_data *filedata;
+  char *mime_type;
+  snprintf(filepath, sizeof filepath, "%s/index.html", SERVER_ROOT);
+  filedata = file_load(filepath);
+  printf("index filepath: %s", filepath);
+
+  if(filedata == NULL) {
+    fprintf(stderr, "Cannot find system Index file\n");
+    exit(3);
+  }
+
+  mime_type = mime_type_get(filepath);
+
+  send_response(fd, "HTTP/1.1 200 OK", mime_type, filedata->data, filedata->size );
 }
 
 /**
@@ -177,15 +174,25 @@ void handle_http_request(int fd, struct cache *cache)
     char request[request_buffer_size];
     char method[200];
     char path[2048];
+    /* char thing[2048]; */
 
     // Read request
     int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
-    /* printf("req %s\n", request); */
-    sscanf(request, "%s %s", method, path );
-    /* printf("method: %s  Path:  %s\n", method, path); */
+
+    sscanf(request, "%s %s", method, path);
+    /* printf("thing: %s\n", thing); */
+    /* printf("method: %s\n", method); */
+    /* printf("path: %s\n", path); */
+
     if(strcmp(method, "GET") == 0) {
       if(strcmp(path, "/d20") == 0) {
-        printf("looking for a d 20\n");
+        get_d20(fd);
+
+      } else if (strcmp(path, "/") == 0) {
+        printf("found the /\n");
+        get_file(fd, cache, path);
+        /* get file goes here */
+
       } else {
         resp_404(fd);
       }
@@ -252,9 +259,6 @@ int main(void)
             perror("accept");
             continue;
         }
-        /* resp_404(newfd); */
-        get_d20(newfd);
-        // Print out a message that we got the connection
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s);
