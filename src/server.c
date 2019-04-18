@@ -45,13 +45,13 @@
  * header:       "HTTP/1.1 404 NOT FOUND" or "HTTP/1.1 200 OK", etc.
  * content_type: "text/plain", etc.
  * body:         the data to send.
- * 
+ *
  * Return the value from the send() function.
  */
 /* send_response(fd, "HTTP/1.1 404 NOT FOUND", mime_type, filedata->data, filedata->size); */
 int send_response(int fd, char *header, char *content_type, void *body, int content_length)
 {
-  printf("calling send response\n");
+  /* printf("calling send response\n"); */
     const int max_response_size = 262144;
     char response[max_response_size];
     time_t rawtime;
@@ -63,21 +63,22 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
     int response_length = sprintf(response, 
         "%s\n"
         "Date: %s"
-        "Connection: closed\n"
-        "Content_Length: %d\n"
-        "Content_type: %s\n"
-        "\n"
-        "%s",
+        "Connection: close\n"
+        "Content-Type: %s\n"
+        "Content-Length: %d\n"
+        "\n",
+        /* "%s", */
        header,
        asctime(info),
-       content_length,
        content_type,
-       body);
+       content_length);
+    /* shifts over response length bytes. Then adds body to the end. */
+    memcpy(response + response_length, body, content_length);
 
-    printf("response: %s\n", response);
-    int rv = send(fd, response, response_length, 0);
-    /* int rv = 99; */
-
+    printf("****** Beginning of response ********\n");
+    printf("%s\n", response);
+    printf("****** End of response ********\n");
+    int rv = send(fd, response, response_length + content_length, 0);
     if (rv < 0) {
         perror("send");
     }
@@ -92,11 +93,12 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 void get_d20(int fd)
 {
   char *mime_type = "text/plain";
+  srand(time(NULL));
   int n = rand() % 20 + 1;
-  int size_of_int = sizeof(n);
-  char d20[30];
+  /* int size_of_int = sizeof(n); */
+  char d20[16];
   sprintf(d20, "%d", n);
-  send_response(fd, "HTTP/1.1 200 OK", mime_type, d20, size_of_int);
+  send_response(fd, "HTTP/1.1 200 OK", mime_type, d20, strlen(d20));
 }
 
 /**
@@ -111,15 +113,21 @@ void resp_404(int fd)
 
     // Fetch the 404.html file
     snprintf(filepath, sizeof filepath, "%s/404.html", SERVER_FILES);
+    /* snprintf(filepath, sizeof filepath, "./serverfiles/404.html"); */
     filedata = file_load(filepath);
     printf("filepath: %s\n", filepath);
-    printf("filedata: %s", filedata->data);
+    /* printf("filedata: %d\n", filedata); */
 
     if (filedata == NULL) {
         // TODO: make this non-fatal
+        printf("This is the error\n");
         fprintf(stderr, "cannot find system 404 file\n");
         exit(3);
     }
+    /* } else { */
+    /*   printf("This means the file data is not null but it's something else\n"); */
+    /*   exit(3); */
+    /* } */
 
     mime_type = mime_type_get(filepath);
 
@@ -134,36 +142,37 @@ void resp_404(int fd)
 void get_file(int fd, struct cache *cache, char *request_path)
 {
 
-  printf("getting file\n");
+  printf(" 142: requests path: %s\n", request_path);
   char filepath[4096];
   struct file_data *filedata;
   char *mime_type;
-  snprintf(filepath, sizeof filepath, "%s/index.html", SERVER_ROOT);
+  snprintf(filepath, sizeof filepath, "%s%s", SERVER_ROOT, request_path);
+
   filedata = file_load(filepath);
-  printf("index filepath: %s", filepath);
+  printf(" 149: file path: %s\n", filepath);
+  printf(" 150: file data: %d\n", filedata);
 
   if(filedata == NULL) {
-    fprintf(stderr, "Cannot find system Index file\n");
-    exit(3);
+    /* printf("going to 404\n"); */
+    resp_404(fd);
   }
 
   mime_type = mime_type_get(filepath);
-
   send_response(fd, "HTTP/1.1 200 OK", mime_type, filedata->data, filedata->size );
 }
 
 /**
  * Search for the end of the HTTP header
- * 
+ *
  * "Newlines" in HTTP can be \r\n (carriage return followed by newline) or \n
  * (newline) or \r (carriage return).
  */
-char *find_start_of_body(char *header)
-{
-    ///////////////////
-    // IMPLEMENT ME! // (Stretch)
-    ///////////////////
-}
+/* char *find_start_of_body(char *header) */
+/* { */
+/*     /////////////////// */
+/*     // IMPLEMENT ME! // (Stretch) */
+/*     /////////////////// */
+/* } */
 
 /**
  * Handle HTTP request and send response
@@ -178,29 +187,24 @@ void handle_http_request(int fd, struct cache *cache)
 
     // Read request
     int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
-
     sscanf(request, "%s %s", method, path);
     /* printf("thing: %s\n", thing); */
     /* printf("method: %s\n", method); */
-    /* printf("path: %s\n", path); */
+    printf("path: %s\n", path);
 
     if(strcmp(method, "GET") == 0) {
       if(strcmp(path, "/d20") == 0) {
         get_d20(fd);
-
-      } else if (strcmp(path, "/") == 0) {
-        printf("found the /\n");
-        get_file(fd, cache, path);
-        /* get file goes here */
-
+      } else if (strcmp(path, "/") == 0)  {
+        get_file(fd, cache, "/index.html");
       } else {
-        resp_404(fd);
+        /* server 404 if none of theother cases work */
+        get_file(fd, cache, path);
+
       }
     } else if (strcmp(method, "POST" == 0)) {
       printf("the method is %s\n", method);
     }
-
-
 
     if (bytes_recvd < 0) {
         perror("recv");
@@ -215,7 +219,7 @@ void handle_http_request(int fd, struct cache *cache)
     // Read the first two components of the first line of the request 
     // so parse the request. Check for the http methods.
     // Respond accordingly.
- 
+
     // If GET, handle the get endpoints
 
     //    Check if it's /d20 and handle that special case
@@ -262,7 +266,7 @@ int main(void)
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s);
-        
+
         printf("server: got connection from %s\n", s);
 
         // newfd is a new socket descriptor for the new connection.
