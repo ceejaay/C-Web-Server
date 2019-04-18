@@ -155,6 +155,7 @@ void get_file(int fd, struct cache *cache, char *request_path)
   if(filedata == NULL) {
     /* printf("going to 404\n"); */
     resp_404(fd);
+    return;
   }
 
   mime_type = mime_type_get(filepath);
