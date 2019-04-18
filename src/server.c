@@ -51,37 +51,30 @@
 /* send_response(fd, "HTTP/1.1 404 NOT FOUND", mime_type, filedata->data, filedata->size); */
 int send_response(int fd, char *header, char *content_type, void *body, int content_length)
 {
+  printf("calling send response\n");
     const int max_response_size = 262144;
     char response[max_response_size];
-    int response_length = strlen(body);
-    /* response = "HTTP/1.1 404 NOT FOUND\n text/plain \n hello world \n\n"; */
-    sprintf(response, "HTTP/1.1\n Content-Type: text/plain\n Connection: close \n \n %s", max_response_size, body);
-    /* sprintf(response, "HTTP/1.1\n */
-    /*     Content-Type: text/plain\n */ 
-    /*     Connection: close\n */
-    /*     \n */
-    /*     %s", */
-    /*       max_response_size, body); */
+    time_t rawtime;
+    struct tm *info;
+    time( &rawtime );
+    info = localtime( &rawtime );
+    /* printf("local %d", info); */
+    /* printf("response: %c", response); */
+    int response_length = sprintf(response, 
+        "%s\n"
+        "Date: %s"
+        "Connection: closed\n"
+        "Content_Length: %d\n"
+        "Content_type: %s\n"
+        "\n"
+        "%s",
+       header,
+       asctime(info),
+       content_length,
+       content_type,
+       body);
 
-
-
-
-    // Build HTTP response and store it in response
-    //                            ////
-    // HTTP/1.1 404 NOT FOUND       //
-    // Date: date time of response  //
-    // Connection: close            //// <= This is what gets sent.
-    // Content-Length: ??           //
-    // Content-Type: text/plain\n   //
-    // \n                           //
-    //                            ////
-    //
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
-
-    // Send it all!
+    printf("response: %s\n", response);
     int rv = send(fd, response, response_length, 0);
     /* int rv = 99; */
 
@@ -98,6 +91,19 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
  */
 void get_d20(int fd)
 {
+  /* I wrote these */
+  /* char filepath[4096]; */
+  /* struct file_data *filedata; */
+  char *mime_type = "text/plain";
+ 
+
+  int n = rand() % 20 + 1;
+  int size_of_int = sizeof(n);
+  char d20[30];
+  sprintf(d20, "%d", n);
+  /* printf("string length: %lu\n", sizeof(n)); */
+  send_response(fd, "HTTP/1.1 200 OK", mime_type, d20, size_of_int);
+
     // Generate a random number between 1 and 20 inclusive
 
     ///////////////////
@@ -169,9 +175,25 @@ void handle_http_request(int fd, struct cache *cache)
 {
     const int request_buffer_size = 65536; // 64K
     char request[request_buffer_size];
+    char method[200];
+    char path[2048];
 
     // Read request
     int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
+    /* printf("req %s\n", request); */
+    sscanf(request, "%s %s", method, path );
+    /* printf("method: %s  Path:  %s\n", method, path); */
+    if(strcmp(method, "GET") == 0) {
+      if(strcmp(path, "/d20") == 0) {
+        printf("looking for a d 20\n");
+      } else {
+        resp_404(fd);
+      }
+    } else if (strcmp(method, "POST" == 0)) {
+      printf("the method is %s\n", method);
+    }
+
+
 
     if (bytes_recvd < 0) {
         perror("recv");
@@ -204,7 +226,6 @@ int main(void)
     int newfd;  // listen on sock_fd, new connection on newfd
     struct sockaddr_storage their_addr; // connector's address information
     char s[INET6_ADDRSTRLEN];
-
     struct cache *cache = cache_create(10, 0);
 
     // Get a listening socket
@@ -222,7 +243,6 @@ int main(void)
     // then goes back to waiting for new connections.
 
     while(1) {
-      printf("working!!");
         socklen_t sin_size = sizeof their_addr;
 
         // Parent process will block on the accept() call until someone
@@ -232,11 +252,13 @@ int main(void)
             perror("accept");
             continue;
         }
-
+        /* resp_404(newfd); */
+        get_d20(newfd);
         // Print out a message that we got the connection
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s);
+        
         printf("server: got connection from %s\n", s);
 
         // newfd is a new socket descriptor for the new connection.
